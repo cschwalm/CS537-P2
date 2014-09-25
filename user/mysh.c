@@ -1,0 +1,17 @@
+
+#include "types.h"
+#include "stat.h"
+#include "user.h"
+
+int
+main(int argc, char *argv[])
+{
+    while(true)
+    {
+        char str[1024];
+        if (fgets(str, 1024, stdin) == NULL) {
+	   fprint("Error!\n");
+        }
+
+    }
+}
