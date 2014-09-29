@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #define MAX_ARGSIZE 1025
@@ -14,7 +16,8 @@ main(int argc, char *argv[])
      char str[MAX_ARGSIZE];
      char * arg;
      char* cmdargs[MAX_ARGSIZE / 2];
-      int count;    
+     int count; 
+     int pid;
 
     while(1 == 1)
     {
@@ -35,7 +38,7 @@ main(int argc, char *argv[])
             arg = strtok(NULL, " \t\n");
 	}
 	cmd = cmdargs[0];
-       
+        cmdargs[count] = NULL;
 	if (strcmp(cmd, SYSTEM_CALLS[0]) == 0) 
 	{
             exit(0);
@@ -65,6 +68,36 @@ main(int argc, char *argv[])
 		continue;
 	    }
 	    printf("%s\n", getcwd(NULL, 0));
+	    continue;
+	}
+
+	//Execute a different process
+	//
+	pid = fork();
+	//Execute the program (this is the child process
+	if(pid == 0)
+	{
+	    if (execvp(cmdargs[0], cmdargs) == -1)
+	    {
+	        printf("Error!\n");
+		//Exit the child process if there is an error
+		exit(0);
+	    }
+	}
+	//Error forking. Print error and continue
+	else if (pid == -1) 
+	{
+	    printf("Error!\n");
+	    continue;
+	}
+	//Parent process. Wait for child to return, then continue execution
+	else 
+	{
+	    if (wait(NULL) == -1)
+	    {
+	        printf("Error!\n");
+		continue;
+	    }
 	    continue;
 	}
 
