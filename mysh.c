@@ -1,8 +1,10 @@
 
+#include <fcntl.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -13,16 +15,19 @@ int
 main(int argc, char *argv[])
 {
 
-     char str[MAX_ARGSIZE];
-     char * arg;
-     char* cmdargs[MAX_ARGSIZE / 2];
-     int count; 
-     int pid;
+    char str[MAX_ARGSIZE];
+    char * arg;
+    char* cmdargs[MAX_ARGSIZE / 2];
+    int count; 
+    int pid;
+    int fp;
+    char * filename;
 
     while(1 == 1)
     {
     	count = 0;
 	char* cmd;
+	fp = 1;
 
 	if (fgets(str, MAX_ARGSIZE, stdin) == NULL) {
 	    printf("Error!\n");
@@ -32,8 +37,37 @@ main(int argc, char *argv[])
         arg = strtok(str, " \t\n");
 	while (arg != NULL)
 	{
-            cmdargs[count] = arg;
-            count++;
+            if (strcmp(arg, ">") == 0)
+	    {
+	        arg = strtok(NULL, " \t\n");
+		if (arg == NULL)
+		{
+		    fprintf(stderr, "Error!\n");
+		    continue;
+		}
+		if (strcmp(arg, ">") == 0)
+		{
+		    arg = strtok(NULL, " \t\n");
+		    if (arg == NULL)
+		    {
+		        fprintf(stderr, "Error!\n");
+			continue;
+		    }
+		    fp = open(arg, O_APPEND);
+		}
+		else 
+		{
+		    fp = open(arg, O_CREAT, S_IRUSR | S_IWUSR);
+		}
+		if (fp == -1)
+		{
+		    fprintf(stderr, "Error!\n");
+		    continue;
+		}
+	    } else {
+	        cmdargs[count] = arg;
+                count++;
+	    }
 		
             arg = strtok(NULL, " \t\n");
 	}
@@ -74,6 +108,11 @@ main(int argc, char *argv[])
 	//Execute a different process
 	//
 	pid = fork();
+	if (dup2(1, fp) == -1)
+	{
+	    fprintf(stderr, "Error!\n");
+	    continue;
+	}
 	//Execute the program (this is the child process
 	if(pid == 0)
 	{
