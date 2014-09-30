@@ -14,25 +14,28 @@
 #include <unistd.h>
 
 #define MAX_ARGSIZE 1025
-const char* SYSTEM_CALLS[] = {"exit", "cd", "pwd"}; 
+const char* SYSTEM_CALLS[] = {"exit", "cd", "pwd"};
+
+/* Function Decelarations. */
+int getCallForPipe(char* str, int* size, char** cmds, int* size2, char** cmds2);
+int getCallForRedirection(char* str, int* size, char** cmds, int* fd);
 
 int
 main(int argc, char *argv[])
 {
-
-	char str[MAX_ARGSIZE];
-	char* arg, arg2;
-	char* cmdargs[MAX_ARGSIZE / 2], cmdargs2[MAX_ARGSIZE / 2];
-	int count, count2; 
-	int pid;
-	int fp;
-   int pipeFlag = 0;
-
 	while (1 == 1)
 	{
-		count = 0;
-		char* cmd;
-		fp = 1;   
+
+		char str[MAX_ARGSIZE];   
+		char* cmdargs[MAX_ARGSIZE / 2];
+		char* cmdargs2[MAX_ARGSIZE / 2];
+		char* tempLine;
+		int count = 0, count2 = 0;
+		int fd = 1;
+		int pid;
+		int returnValue;
+		int pipeFlag = 0;
+		int p[2];
 
 		if (fgets(str, MAX_ARGSIZE, stdin) == NULL)
 		{
@@ -40,77 +43,42 @@ main(int argc, char *argv[])
 			continue;
 		}
 
-		arg = strtok(str, " \t\n");
-		while (arg != NULL)
+		if (strchr(str, '|') != NULL)
 		{
-			if (strcmp(arg, ">") == 0)
+			returnValue = getCallForPipe(str, &count, cmdargs, &count2, cmdargs2);
+			pipeFlag = 1;
+		}
+		else if (strchr(str, '>') != NULL)
+		{
+			returnValue = getCallForRedirection(str, &count, cmdargs, &fd);
+		}
+		else
+		{
+			tempLine = strtok(str, " \t\n");
+
+			while (tempLine != NULL)
 			{
-				arg = strtok(NULL, " \t\n");
-				if (arg == NULL)
-				{
-					fprintf(stderr, "Error!\n");
-					continue;
-				}
+				cmdargs[count] = tempLine;
+				cmdargs[count + 1] = NULL;
+				count++;
 
-				fp = open(arg, O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR);
-			}
-			else if (strcmp(arg, ">>") == 0)
-			{
-				arg = strtok(NULL, " \t\n");
-
-				if (arg == NULL)
-				{
-					fprintf(stderr, "Error!\n");
-					continue;
-				}
-
-				fp = open(arg, O_APPEND | O_CREAT | O_WRONLY);
-			}
-         else if (strcmp(arg, "|") == 0)
-         {
-            
-
-         }
-			else
-			{
-            if (pipeFlag == 0)
-            {				
-               cmdargs[count] = arg;
-				   count++;
-            }
-            else
-            {
-               cmdargs[count] = arg;
-				   count++;
-            }
-			}
-
-         if (pipeFlag == 0)
-            {				
-               cmd = cmdargs[0];
-            }
-            else
-            {
-               cmd = cmdargs2[0];
-            }
-
-			arg = strtok(NULL, " \t\n");
-			
-			cmdargs[count] = NULL;
-
+				tempLine = strtok(NULL, " \t\n");
+   		}
 		}
 
-		if (fp == -1)
+		if (returnValue == -1)
 		{
-			fprintf(stderr, "Error!\n");
+			printf("Error!\n");
 			continue;
-		}     
+		}
 
-		if (strcmp(cmd, SYSTEM_CALLS[0]) == 0) 
+		//Input has been parsed.
+
+		if (strcmp(cmdargs[0], SYSTEM_CALLS[0]) == 0) 
 		{
 			exit(0);
 		}
-		else if (strcmp(cmd, SYSTEM_CALLS[1]) == 0) 
+		else if (strcmp(cmdargs[0], SYSTEM_CALLS[1]) == 0) 
 		{
 			if (count == 1)
 			{
@@ -126,7 +94,7 @@ main(int argc, char *argv[])
 			}
 			continue;
 		}
-		else if (strcmp(cmd, SYSTEM_CALLS[2]) == 0) 
+		else if (strcmp(cmdargs[0], SYSTEM_CALLS[2]) == 0) 
 		{
 			if (count != 1)
 			{
@@ -137,21 +105,37 @@ main(int argc, char *argv[])
 			continue;
 		}
 
+		//Check To See If Pipe Needs To Be Created
+		if (pipeFlag == 1)
+		{
+			pipe(p);
+			fd = p[1];
+		}
 
-		//Execute a different process
+		//Create a different process
 		pid = fork();
 
-		//Execute the program (this is the child process
+		//Execute the program (this is the child process)
 		if(pid == 0)
 		{
-			if (dup2(fp, 1) == -1)
+
+			if (pipeFlag == 1)
 			{
-				fprintf(stderr, "Error!\n");
-				exit(0);
+				close(p[1]);
+				dup2(p[0], 0);
 			}
-			/* Close the file pointer if a copy has been made. */
-			if (fp != 1)
-				close(fp);
+			else
+			{
+				if (dup2(fd, 1) == -1)
+				{
+					fprintf(stderr, "Error!\n");
+					exit(0);
+				}
+			}
+
+			//Close the file pointer if a copy has been made.
+			if (fd != 1 && pipeFlag == 0)
+				close(fd);
 
 			if (execvp(cmdargs[0], cmdargs) == -1)
 			{
@@ -169,6 +153,12 @@ main(int argc, char *argv[])
 		//Parent process. Wait for child to return, then continue execution
 		else 
 		{
+			if (pipeFlag)
+			{
+				close(p[0]);
+				dup2(p[1], 1);
+			}
+
 			if (wait(NULL) == -1)
 			{
 				printf("Error!\n");
@@ -178,5 +168,94 @@ main(int argc, char *argv[])
 			continue;
 		}   
 	}
+
 	return 0;
+}
+
+//
+// Accepts a string of characters and sets the last four parameters of
+// the of this function call. It uses the supplied arrays
+// and correctly sets the size parameters. This is used for the pipe special
+// case.
+//
+// Returns -1 if the data was invalid.
+//
+int
+getCallForPipe(char* str, int* size, char** cmds, int* size2, char** cmds2)
+{
+   str = strtok(str, " \t\n");
+	
+   /* Fill array 1. */   
+   while (str != NULL)
+   {
+      if (strcmp(str, "|") == 0)
+		{
+         /* End of section 1. */
+         str = strtok(NULL, " \t\n");
+         break;
+		}
+
+      cmds[*size] = str;
+      cmds[*size + 1] = NULL;
+      (*size)++;
+
+      str = strtok(NULL, " \t\n");
+   }
+
+   /* Valid Data Check. */
+   if (str == NULL)
+   {
+      return -1;
+   }
+
+   /* Fill array 2. */   
+
+   while (str != NULL)
+   {
+      cmds2[*size2] = str;
+      cmds2[*size2 + 1] = NULL;
+      (*size2)++;
+
+      str = strtok(NULL, " \t\n");
+   }
+
+   return 0;
+}
+
+//
+// Accepts a string of characters and sets the passed array with its 
+// argument tokens. The size value is also correctly set.
+//
+// The output parameter is used to set the file descripter to redirect the output.
+//
+// If the supplied string is invalid, -1 is returned.
+//
+int
+getCallForRedirection(char* str, int* size, char** cmds, int* fd)
+{
+   str = strtok(str, " \t\n");
+
+   while (str != NULL)
+   {
+      if (strcmp(str, ">") == 0)
+		{
+         str = strtok(NULL, " \t\n"); //Advance to the file name.         
+         *fd = open(str, O_CREAT | O_TRUNC | O_WRONLY, S_IRUSR | S_IWUSR);
+         break;
+		}
+      else if (strcmp(str, ">>") == 0)
+      {
+         str = strtok(NULL, " \t\n"); //Advance to the file name.         
+         *fd = open(str, O_APPEND | O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR);
+         break;
+      }
+
+      cmds[*size] = str;
+      cmds[*size + 1] = NULL;
+      (*size)++;
+
+      str = strtok(NULL, " \t\n");
+   }
+
+   return *fd;
 }
