@@ -123,7 +123,7 @@ main(int argc, char *argv[])
 			{
 				close(p[0]);
 				dup2(p[1], 1);
-				close(1); //Closing stdout
+				close(p[1]); //Closing stdout
 			}
 			else
 			{
@@ -169,8 +169,30 @@ main(int argc, char *argv[])
 				{
 					close(p[1]);
 					dup2(p[0], 0);
-					close(0);
+					if (p[0] != 0)
+						close(p[0]);
 					// end here
+					//
+					if (execvp(cmdargs2[0], cmdargs2) == -1)
+					{
+						fprintf(stderr, "Error!\n");
+						exit(0);
+					}
+				}
+				else if (pid == -1)
+				{
+					fprintf(stderr, "Error!\n");
+					exit(0);
+				}
+				else 
+				{
+					if (wait(NULL) == -1)
+					{
+					  fprintf(stderr, "Error!\n");
+						continue;
+					}
+					continue;
+				}
 			}
 
 			continue;
