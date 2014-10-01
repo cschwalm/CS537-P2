@@ -118,11 +118,12 @@ main(int argc, char *argv[])
 		//Execute the program (this is the child process)
 		if(pid == 0)
 		{
-
+			//if we are piping, we are overriding stdout to pipe (Child Process A)
 			if (pipeFlag == 1)
 			{
-				close(p[1]);
-				dup2(p[0], 0);
+				close(p[0]);
+				dup2(p[1], 1);
+				close(1); //Closing stdout
 			}
 			else
 			{
@@ -131,11 +132,10 @@ main(int argc, char *argv[])
 					fprintf(stderr, "Error!\n");
 					exit(0);
 				}
+				if (fd != 1)
+					close(fd);
 			}
 
-			//Close the file pointer if a copy has been made.
-			if (fd != 1 && pipeFlag == 0)
-				close(fd);
 
 			if (execvp(cmdargs[0], cmdargs) == -1)
 			{
@@ -153,16 +153,24 @@ main(int argc, char *argv[])
 		//Parent process. Wait for child to return, then continue execution
 		else 
 		{
-			if (pipeFlag)
-			{
-				close(p[0]);
-				dup2(p[1], 1);
-			}
 
 			if (wait(NULL) == -1)
 			{
 				printf("Error!\n");
 				continue;
+			}
+			
+			if (pipeFlag)
+			{
+				//create child process B
+				pid = fork();
+
+				if (pid == 0)
+				{
+					close(p[1]);
+					dup2(p[0], 0);
+					close(0);
+					// end here
 			}
 
 			continue;
