@@ -37,9 +37,11 @@ main(int argc, char *argv[])
 		int pipeFlag = 0;
 		int p[2];
 
+		printf("mysh> ");
+
 		if (fgets(str, MAX_ARGSIZE, stdin) == NULL)
 		{
-			printf("Error!\n");
+			fprintf(stderr, "Error!\n");
 			continue;
 		}
 
@@ -68,7 +70,12 @@ main(int argc, char *argv[])
 
 		if (returnValue == -1)
 		{
-			printf("Error!\n");
+			fprintf(stderr, "Error!\n");
+			continue;
+		}
+		
+		if (count == 0)
+		{
 			continue;
 		}
 
@@ -76,7 +83,10 @@ main(int argc, char *argv[])
 
 		if (strcmp(cmdargs[0], SYSTEM_CALLS[0]) == 0) 
 		{
-			exit(0);
+			if (count == 1)
+				exit(0);
+			fprintf(stderr, "Error!\n");
+			continue;
 		}
 		else if (strcmp(cmdargs[0], SYSTEM_CALLS[1]) == 0) 
 		{
@@ -86,11 +96,12 @@ main(int argc, char *argv[])
 			}
 			else if (count == 2)
 			{
-				chdir(cmdargs[1]);
+				if (chdir(cmdargs[1]) == -1)
+					fprintf(stderr, "Error!\n");
 			}
 			else 
 			{
-				printf("Error!\n");
+				fprintf(stderr, "Error!\n");
 			}
 			continue;
 		}
@@ -98,7 +109,7 @@ main(int argc, char *argv[])
 		{
 			if (count != 1)
 			{
-				printf("Error!\n");
+				fprintf(stderr, "Error!\n");
 				continue;
 			}
 			printf("%s\n", getcwd(NULL, 0));
@@ -111,6 +122,7 @@ main(int argc, char *argv[])
 			pipe(p);
 			fd = p[1];
 		}
+		
 
 		//Create a different process
 		pid = fork();
@@ -123,14 +135,14 @@ main(int argc, char *argv[])
 			{
 				close(p[0]);
 				dup2(p[1], 1);
-				close(p[1]); //Closing stdout
+				//close(p[1]); //Closing stdout
 			}
 			else
 			{
 				if (dup2(fd, 1) == -1)
 				{
 					fprintf(stderr, "Error!\n");
-					exit(0);
+					exit(1);
 				}
 				if (fd != 1)
 					close(fd);
@@ -139,27 +151,29 @@ main(int argc, char *argv[])
 
 			if (execvp(cmdargs[0], cmdargs) == -1)
 			{
-				printf("Error!\n");
+				fprintf(stderr, "Error!\n");
 				//Exit the child process if there is an error
-				exit(0);
+				exit(1);
 			}
 		}
 		//Error forking. Print error and continue
 		else if (pid == -1) 
 		{
-			printf("Error!\n");
+			fprintf(stderr, "Error!\n");
 			continue;
 		}
 		//Parent process. Wait for child to return, then continue execution
 		else 
 		{
+			
 
 			if (wait(NULL) == -1)
 			{
-				printf("Error!\n");
+				fprintf(stderr, "Error!\n");
 				continue;
 			}
 			
+
 			if (pipeFlag)
 			{
 				//create child process B
@@ -176,16 +190,18 @@ main(int argc, char *argv[])
 					if (execvp(cmdargs2[0], cmdargs2) == -1)
 					{
 						fprintf(stderr, "Error!\n");
-						exit(0);
+						exit(1);
 					}
 				}
 				else if (pid == -1)
 				{
 					fprintf(stderr, "Error!\n");
-					exit(0);
+					exit(1);
 				}
 				else 
 				{
+					close(p[0]);
+					close(p[1]);
 					if (wait(NULL) == -1)
 					{
 					  fprintf(stderr, "Error!\n");
@@ -194,6 +210,9 @@ main(int argc, char *argv[])
 					continue;
 				}
 			}
+
+			
+			
 
 			continue;
 		}   
